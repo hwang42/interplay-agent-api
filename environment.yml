@@ -1,0 +1,17 @@
+name: agent-api
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.12
+
+  - conda-forge::fastapi
+  - conda-forge::sqlmodel
+
+  - conda-forge::openai
+
+  - backoff[version='>=1.10.0']
+  - wrapt[version='<2.0,>=1.14']
+  - packaging[version='<25.0,>=23.2']
+  - pip:
+    - langfuse

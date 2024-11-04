@@ -1,0 +1,10 @@
+# python gitignore
+__pycache__/
+*.py[cod]
+*$py.class
+
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+.venv/
