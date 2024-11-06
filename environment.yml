@@ -5,13 +5,18 @@ channels:
 dependencies:
   - python=3.12
 
-  - conda-forge::fastapi
-  - conda-forge::sqlmodel
+  - jinja2=3.1
 
-  - conda-forge::openai
+  - fastapi=0.112
+  - pydantic=2.8
+
+  - psycopg=3.2
+  - sqlalchemy=2.0
+
+  - openai=1.52
 
   - backoff[version='>=1.10.0']
   - wrapt[version='<2.0,>=1.14']
   - packaging[version='<25.0,>=23.2']
   - pip:
-    - langfuse
+    - langfuse==2.53
