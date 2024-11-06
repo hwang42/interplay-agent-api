@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from openai import OpenAI
+from langfuse.decorators import observe
+from langfuse.openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
 from ..utils import TemplateManager
@@ -43,6 +44,7 @@ class RolePlayManager:
         self.model = model
         self.client = client or OpenAI()
 
+    @observe(name="role-play-init")
     def start(
             self,
             context: str,
@@ -74,6 +76,7 @@ class RolePlayManager:
 
         return content, history
 
+    @observe(name="role-play-step")
     def step(
             self,
             context: str,

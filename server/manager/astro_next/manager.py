@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from openai import OpenAI
+from langfuse.decorators import observe
+from langfuse.openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
 from ..utils import TemplateManager
@@ -44,6 +45,7 @@ class AstroNextManager:
         self.model = model
         self.client = client or OpenAI()
 
+    @observe(name="astro_next_init")
     def start(
             self,
             context: str,
@@ -76,6 +78,7 @@ class AstroNextManager:
 
         return match.group(1).strip(), history
 
+    @observe(name="astro_next_step")
     def step(
             self,
             context: str,

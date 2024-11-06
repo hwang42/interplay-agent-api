@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
+from typing import Literal, Optional
 
-from openai import OpenAI
+from langfuse.decorators import observe
+from langfuse.openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
 from ..utils import TemplateManager
@@ -48,15 +49,18 @@ class AstroLiteHistory:
 class AstroLiteManager:
     def __init__(
             self,
+            mode: Literal["mixed", "inquiry", "persuasion", "information"],
             *,
             model: str = "gpt-4o-mini",
             client: Optional[OpenAI] = None
     ) -> None:
         self.templates = TemplateManager(__name__)
 
+        self.mode = mode
         self.model = model
         self.client = client or OpenAI()
 
+    @observe(name="astro_lite_init")
     def start(
             self,
             context: str,
@@ -68,7 +72,8 @@ class AstroLiteManager:
     ) -> tuple[str, AstroLiteHistory]:
         history = AstroLiteHistory()
 
-        history.add_system(self.templates.sys().render())
+        history.add_system(
+            self.templates.sys(suffix=f"sys_{self.mode}").render())
         history.add_child(self.templates.get("start").render(
             context=context,
             question=question,
@@ -89,6 +94,7 @@ class AstroLiteManager:
 
         return match.group(1).strip(), history
 
+    @observe(name="astro_lite_step")
     def step(
             self,
             context: str,

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from openai import OpenAI
+from langfuse.decorators import observe
+from langfuse.openai import OpenAI
 from openai.types.chat import ParsedChatCompletion
 from pydantic import BaseModel
 
@@ -61,12 +62,14 @@ class RehearsalHistory:
 class RehearsalManager:
     def __init__(
             self,
+            mode: Literal["mixed", "inquiry", "persuasion", "information"],
             *,
             model: str = "gpt-4o-mini",
             client: Optional[OpenAI] = None
     ) -> None:
         self.templates = TemplateManager(__name__)
 
+        self.mode = mode
         self.model = model
         self.client = client or OpenAI()
 
@@ -85,7 +88,8 @@ class RehearsalManager:
             messages=[
                 {
                     "role": "system",
-                    "content": self.templates.sys("select").render()
+                    "content": self.templates.sys(
+                        "select", suffix=f"sys_{self.mode}").render()
                 },
                 {
                     "role": "user",
@@ -131,7 +135,8 @@ class RehearsalManager:
             messages=[
                 {
                     "role": "system",
-                    "content": self.templates.sys("shared").render()
+                    "content": self.templates.sys(
+                        "shared", suffix=f"sys_{self.mode}").render()
                 },
                 {
                     "role": "user",
@@ -148,6 +153,7 @@ class RehearsalManager:
             seed=seed
         )
 
+    @observe(name="rehearsal_init")
     def start(
             self,
             context: str,
@@ -169,6 +175,7 @@ class RehearsalManager:
 
         return response.response, history
 
+    @observe(name="rehearsal_step")
     def step(
             self,
             context: str,
