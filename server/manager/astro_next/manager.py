@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
+import uuid
 from typing import Optional
 
-from langfuse.decorators import observe
+from langfuse.decorators import langfuse_context, observe
 from langfuse.openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
@@ -54,7 +55,7 @@ class AstroNextManager:
             *,
             temperature: float = 0.8,
             seed: int = 621
-    ) -> tuple[str, AstroNextHistory]:
+    ) -> tuple[str, AstroNextHistory, uuid.UUID]:
         history = AstroNextHistory()
 
         history.add_system(self.templates.sys().render())
@@ -76,7 +77,10 @@ class AstroNextManager:
 
         history.add_result(content)
 
-        return match.group(1).strip(), history
+        trace_uuid = langfuse_context.get_current_trace_id()
+        assert trace_uuid is not None
+
+        return match.group(1).strip(), history, uuid.UUID(trace_uuid)
 
     @observe(name="astro_next_step")
     def step(
@@ -89,7 +93,7 @@ class AstroNextManager:
             *,
             temperature: float = 0.8,
             seed: int = 621
-    ) -> tuple[str, AstroNextHistory]:
+    ) -> tuple[str, AstroNextHistory, uuid.UUID]:
         history.add_child(reply)
 
         response = self.client.chat.completions.create(
@@ -104,4 +108,7 @@ class AstroNextManager:
 
         history.add_result(content)
 
-        return match.group(1).strip(), history
+        trace_uuid = langfuse_context.get_current_trace_id()
+        assert trace_uuid is not None
+
+        return match.group(1).strip(), history, uuid.UUID(trace_uuid)

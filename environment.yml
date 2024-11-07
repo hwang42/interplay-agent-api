@@ -8,6 +8,7 @@ dependencies:
   - jinja2=3.1
 
   - fastapi=0.112
+  - fastapi-cli
   - pydantic=2.8
 
   - psycopg=3.2

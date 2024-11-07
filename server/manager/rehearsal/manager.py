@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import uuid
 from typing import Literal, Optional
 
-from langfuse.decorators import observe
+from langfuse.decorators import langfuse_context, observe
 from langfuse.openai import OpenAI
 from openai.types.chat import ParsedChatCompletion
+
 from pydantic import BaseModel
 
 from ..utils import TemplateManager
@@ -159,7 +161,7 @@ class RehearsalManager:
             context: str,
             question: str,
             answer: str
-    ) -> tuple[str, RehearsalHistory]:
+    ) -> tuple[str, RehearsalHistory, uuid.UUID]:
         history = RehearsalHistory()
 
         action_res = self.select_action(context, question, answer, history)
@@ -173,7 +175,10 @@ class RehearsalManager:
 
         history.add_agent(action, response)
 
-        return response.response, history
+        trace_uuid = langfuse_context.get_current_trace_id()
+        assert trace_uuid is not None
+
+        return response.response, history, uuid.UUID(trace_uuid)
 
     @observe(name="rehearsal_step")
     def step(
@@ -183,7 +188,7 @@ class RehearsalManager:
             answer: str,
             history: RehearsalHistory,
             reply: str
-    ) -> tuple[str, RehearsalHistory]:
+    ) -> tuple[str, RehearsalHistory, uuid.UUID]:
         history.add_child(reply)
 
         action_res = self.select_action(context, question, answer, history)
@@ -197,4 +202,7 @@ class RehearsalManager:
 
         history.add_agent(action, response)
 
-        return response.response, history
+        trace_uuid = langfuse_context.get_current_trace_id()
+        assert trace_uuid is not None
+
+        return response.response, history, uuid.UUID(trace_uuid)

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import uuid
 from typing import Optional
 
-from langfuse.decorators import observe
+from langfuse.decorators import langfuse_context, observe
 from langfuse.openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
@@ -53,7 +54,7 @@ class RolePlayManager:
             *,
             temperature: float = 0.8,
             seed: int = 621
-    ) -> tuple[str, RolePlayHistory]:
+    ) -> tuple[str, RolePlayHistory, uuid.UUID]:
         history = RolePlayHistory()
 
         history.add_system(self.templates.sys().render())
@@ -74,7 +75,10 @@ class RolePlayManager:
 
         history.add_result(content)
 
-        return content, history
+        trace_uuid = langfuse_context.get_current_trace_id()
+        assert trace_uuid is not None
+
+        return content, history, uuid.UUID(trace_uuid)
 
     @observe(name="role-play-step")
     def step(
@@ -87,7 +91,7 @@ class RolePlayManager:
             *,
             temperature: float = 0.8,
             seed: int = 621
-    ) -> tuple[str, RolePlayHistory]:
+    ) -> tuple[str, RolePlayHistory, uuid.UUID]:
         history.add_child(reply)
 
         response = self.client.chat.completions.create(
@@ -101,4 +105,7 @@ class RolePlayManager:
 
         history.add_result(content)
 
-        return content, history
+        trace_uuid = langfuse_context.get_current_trace_id()
+        assert trace_uuid is not None
+
+        return content, history, uuid.UUID(trace_uuid)
