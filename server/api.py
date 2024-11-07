@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import os
 import re
 import uuid as uuid_lib
-from typing import Type
+from typing import Annotated, Type
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from pydantic import BaseModel, Field
 
@@ -16,6 +18,8 @@ from .manager.astro_lite import AstroLiteHistory, AstroLiteManager
 from .manager.astro_next import AstroNextHistory, AstroNextManager
 from .manager.rehearsal import RehearsalHistory, RehearsalManager
 from .manager.role_play import RolePlayHistory, RolePlayManager
+
+KEY = os.getenv("MASTER_KEY")
 
 MODELS: dict[str,
              tuple[RolePlayManager, Type[RolePlayHistory]]
@@ -39,6 +43,8 @@ MODELS: dict[str,
 }
 
 api = FastAPI()
+
+security = HTTPBearer()
 
 
 @ api.get("/models")
@@ -66,8 +72,11 @@ class InitPostData(BaseModel):
 
 
 @ api.post("/init")
-async def post_init(data: InitPostData, database: Session = Depends(get_database)) -> Reply:
+async def post_init(key: Annotated[HTTPAuthorizationCredentials, Depends(security)], data: InitPostData, database: Session = Depends(get_database)) -> Reply:
     """Initialize a new conversation with a specific model."""
+
+    if key.scheme != "Bearer" or key.credentials != KEY:
+        raise HTTPException(401, "Invalid API key")
 
     if data.model not in MODELS:
         raise HTTPException(404, f"Model: \"{data.model}\" is unknown")
@@ -126,8 +135,11 @@ class StepPostData(BaseModel):
 
 
 @ api.post("/step")
-async def post_step(data: StepPostData, database: Session = Depends(get_database)) -> Reply:
+async def post_step(key: Annotated[HTTPAuthorizationCredentials, Depends(security)], data: StepPostData, database: Session = Depends(get_database)) -> Reply:
     """Continue one additional step with an existing conversation."""
+
+    if key.scheme != "Bearer" or key.credentials != KEY:
+        raise HTTPException(401, "Invalid API key")
 
     if data.model not in MODELS:
         raise HTTPException(404, f"Model: \"{data.model}\" is unknown")
@@ -216,8 +228,11 @@ class Messages(BaseModel):
 
 
 @api.post("/messages")
-async def post_messages(data: MessagesPostData, database: Session = Depends(get_database)) -> Messages:
+async def post_messages(key: Annotated[HTTPAuthorizationCredentials, Depends(security)], data: MessagesPostData, database: Session = Depends(get_database)) -> Messages:
     """Get the messages in the conversation ending in the referred message."""
+
+    if key.scheme != "Bearer" or key.credentials != KEY:
+        raise HTTPException(401, "Invalid API key")
 
     if data.model not in MODELS:
         raise HTTPException(404, f"Model: \"{data.model}\" is unknown")
