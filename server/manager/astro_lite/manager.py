@@ -10,19 +10,6 @@ from openai.types.chat import ChatCompletionMessageParam
 
 from ..utils import TemplateManager
 
-PATTERN = r"""```markdown
-\[Agenda\] [^[]+
-\[Obligation\] [^[]+
-\[Thought\] [^[]+
-\[Critique\] [^[]+
-\[Revised\] [^[]+
-\[Dialogue\] I will (start a new|continue the existing) (information-seeking|persuasion|inquiry) dialogue about [^[]+
-\[Comment\] [^[]+
-\[Response\] [^[]+
-\[End\]
-\[Terminate\] [^[]+
-```"""
-
 
 class AstroLiteHistory:
     def __init__(self) -> None:
@@ -116,8 +103,7 @@ class AstroLiteManager:
             model=self.model,
             messages=history.history,
             temperature=temperature,
-            seed=seed,
-            extra_body=dict(guided_regex=PATTERN)
+            seed=seed
         )
 
         assert (content := response.choices[0].message.content) is not None
