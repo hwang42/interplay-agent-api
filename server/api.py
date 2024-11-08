@@ -42,7 +42,7 @@ MODELS: dict[str,
     "astro_next": (AstroNextManager(), AstroNextHistory)
 }
 
-api = FastAPI()
+api = FastAPI(version="0.1.1")
 
 security = HTTPBearer()
 
