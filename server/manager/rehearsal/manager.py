@@ -19,8 +19,8 @@ class ActionData(BaseModel):
         "continue information-seeking",
         "new persuasion",
         "continue persuasion",
-        "new inquiry",
-        "continue inquiry"
+        "new co-construction",
+        "continue co-construction"
     ]
 
 
@@ -119,8 +119,8 @@ class RehearsalManager:
                 "continue information-seeking",
                 "new persuasion",
                 "continue persuasion",
-                "new inquiry",
-                "continue inquiry"
+                "new co-construction",
+                "continue co-construction"
             ],
             *,
             temperature: float = 0.8,
@@ -129,7 +129,7 @@ class RehearsalManager:
         template = {
             "information-seeking": "s",
             "persuasion": "p",
-            "inquiry": "i"
+            "co-construction": "i"
         }[action.split()[1]]
 
         return self.client.beta.chat.completions.parse(

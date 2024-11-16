@@ -6,6 +6,7 @@ import uuid as uuid_lib
 from typing import Annotated, Type
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from pydantic import BaseModel, Field
@@ -42,7 +43,14 @@ MODELS: dict[str,
     "astro_next": (AstroNextManager(), AstroNextHistory)
 }
 
-api = FastAPI(version="0.1.1")
+api = FastAPI(version="0.1.2")
+
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"]
+)
 
 security = HTTPBearer()
 
