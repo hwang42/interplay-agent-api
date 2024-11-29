@@ -43,7 +43,7 @@ MODELS: dict[str,
     "astro_next": (AstroNextManager(), AstroNextHistory)
 }
 
-api = FastAPI(version="0.1.2")
+api = FastAPI(version="0.1.3")
 
 api.add_middleware(
     CORSMiddleware,
