@@ -18,6 +18,8 @@ from .database import History, Setup, get_database
 from .manager.astro_lite import AstroLiteHistory, AstroLiteManager
 from .manager.astro_next import AstroNextHistory, AstroNextManager
 from .manager.rehearsal import RehearsalHistory, RehearsalManager
+from .manager.rehearsal_rewrite import (RehearsalRewriteHistory,
+                                        RehearsalRewriteManager)
 from .manager.role_play import RolePlayHistory, RolePlayManager
 
 KEY = os.getenv("MASTER_KEY")
@@ -25,6 +27,7 @@ KEY = os.getenv("MASTER_KEY")
 MODELS: dict[str,
              tuple[RolePlayManager, Type[RolePlayHistory]]
              | tuple[RehearsalManager, Type[RehearsalHistory]]
+             | tuple[RehearsalRewriteManager, Type[RehearsalRewriteHistory]]
              | tuple[AstroLiteManager, Type[AstroLiteHistory]]
              | tuple[AstroNextManager, Type[AstroNextHistory]]] = {
     # role play agent
@@ -34,6 +37,11 @@ MODELS: dict[str,
     "rehearsal_inquiry": (RehearsalManager("inquiry"), RehearsalHistory),
     "rehearsal_persuasion": (RehearsalManager("persuasion"), RehearsalHistory),
     "rehearsal_information": (RehearsalManager("information"), RehearsalHistory),
+    # rehearsal rewrite agent
+    "rehearsal_rewrite_mixed": (RehearsalRewriteManager("mixed"), RehearsalRewriteHistory),
+    "rehearsal_rewrite_inquiry": (RehearsalRewriteManager("inquiry"), RehearsalRewriteHistory),
+    "rehearsal_rewrite_persuasion": (RehearsalRewriteManager("persuasion"), RehearsalRewriteHistory),
+    "rehearsal_rewrite_information": (RehearsalRewriteManager("information"), RehearsalRewriteHistory),
     # astro lite agent
     "astro_lite_mixed": (AstroLiteManager("mixed"), AstroLiteHistory),
     "astro_lite_inquiry": (AstroLiteManager("inquiry"), AstroLiteHistory),
@@ -43,7 +51,7 @@ MODELS: dict[str,
     "astro_next": (AstroNextManager(), AstroNextHistory)
 }
 
-api = FastAPI(version="0.1.3")
+api = FastAPI(version="0.1.4")
 
 api.add_middleware(
     CORSMiddleware,
@@ -196,7 +204,7 @@ async def post_step(key: Annotated[HTTPAuthorizationCredentials, Depends(securit
         parent = history_list[-1][1]
 
         for item in history.history[len(history_list):]:
-            if isinstance(history, RehearsalHistory):
+            if isinstance(history, (RehearsalHistory, RehearsalRewriteHistory)):
                 # item is either a str (child) or dict (agent)
                 if isinstance(item, str):
                     entry_data = {"message": item}
@@ -269,7 +277,12 @@ async def post_messages(key: Annotated[HTTPAuthorizationCredentials, Depends(sec
         print(message)
         if model.startswith("rehearsal"):
             if not "message" in message:
-                messages.append((uuid, "agent", message["response_response"]))
+                if not "rewrite" in model:
+                    messages.append(
+                        (uuid, "agent", message["response_response"]))
+                else:
+                    messages.append(
+                        (uuid, "agent", message["response_rewrite"]))
             else:
                 messages.append((uuid, "child", message["message"]))
         elif model.startswith("astro"):
