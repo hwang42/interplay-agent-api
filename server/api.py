@@ -107,7 +107,7 @@ async def post_init(key: Annotated[HTTPAuthorizationCredentials, Depends(securit
         parent = None
 
         for index, item in enumerate(history.history):
-            if isinstance(history, RehearsalHistory):
+            if isinstance(history, (RehearsalHistory, RehearsalRewriteHistory)):
                 # item is either a str (child) or dict (agent)
                 if isinstance(item, str):
                     entry_data = {"message": item}

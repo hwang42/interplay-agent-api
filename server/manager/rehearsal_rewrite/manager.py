@@ -59,10 +59,10 @@ class RehearsalRewriteManager:
         self.model = model
         self.client = client or OpenAI()
 
-        self.rewrite_model = os.getenv("rewrite_model", model)
+        self.rewrite_model = os.getenv("REWRITE_MODEL", model)
         self.rewrite_client = OpenAI(
-            api_key=os.getenv("rewrite_api_key", None),
-            base_url=os.getenv("rewrite_base_url", None)
+            api_key=os.getenv("REWRITE_API_KEY", None),
+            base_url=os.getenv("REWRITE_BASE_URL", None)
         )
 
     def select_action(
@@ -157,16 +157,18 @@ class RehearsalRewriteManager:
             messages=[
                 {
                     "role": "user",
-                    "content": f""""What should a conversational agent, acting as a parent, should say in the following conversational context:
+                    "content": f"""What should a conversational agent, acting as a parent, should say in the following conversational context:
 
 {str(history)}
 
-Here is a hint of what an agent not acting as a parent might say: {content}"""
+Here is what another agent might say:
+
+{content}"""
                 }
             ],
             temperature=temperature,
             max_tokens=128,
-            stop="\n\n",
+            stop=["\n\n", "Agent:", "Child:"],
             seed=seed
         )
 
@@ -174,7 +176,7 @@ Here is a hint of what an agent not acting as a parent might say: {content}"""
 
         return response.choices[0].message.content.strip()
 
-    @observe(name="rehearsal_init")
+    @observe(name="rehearsal_rewrite_init")
     def start(
             self,
             context: str,
@@ -199,9 +201,9 @@ Here is a hint of what an agent not acting as a parent might say: {content}"""
         trace_uuid = langfuse_context.get_current_trace_id()
         assert trace_uuid is not None
 
-        return response.response, history, uuid.UUID(trace_uuid)
+        return response_rewrite, history, uuid.UUID(trace_uuid)
 
-    @observe(name="rehearsal_step")
+    @observe(name="rehearsal_rewrite_step")
     def step(
             self,
             context: str,
@@ -228,4 +230,4 @@ Here is a hint of what an agent not acting as a parent might say: {content}"""
         trace_uuid = langfuse_context.get_current_trace_id()
         assert trace_uuid is not None
 
-        return response.response, history, uuid.UUID(trace_uuid)
+        return response_rewrite, history, uuid.UUID(trace_uuid)
