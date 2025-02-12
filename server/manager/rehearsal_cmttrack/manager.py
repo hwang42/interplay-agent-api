@@ -193,11 +193,11 @@ class RehearsalCommitTrackManager:
             messages=[
                 {
                     "role": "user",
-                    "content": f"""Identify and summarize the commitments in the following conversation:
+                    "content": f"""Identify the words or phrases in the following conversation that express commitment or dedication to a particular cause, goal, or obligation.
 
 {str(history)}
 
-Now list the commitments.
+Now list all the identified commitments.
 
 - """,
                 }
