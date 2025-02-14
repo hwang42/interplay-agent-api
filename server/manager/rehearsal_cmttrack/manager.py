@@ -141,6 +141,15 @@ class RehearsalCommitTrackManager:
             "co-construction": "i",
         }[action.split()[1]]
 
+        rendered_prompt = self.templates.usr(template).render(
+            context=context,
+            question=question,
+            stance=answer,
+            conversation=str(history),
+        )
+        if cmttrack:
+            rendered_prompt += f"## Conversation Commitments Summary:\n\n{cmttrack}"
+
         return self.client.beta.chat.completions.parse(
             model=self.model,
             messages=[
@@ -152,14 +161,7 @@ class RehearsalCommitTrackManager:
                 },
                 {
                     "role": "user",
-                    "content": self.templates.usr(template).render(
-                        context=context,
-                        question=question,
-                        stance=answer,
-                        conversation=str(history),
-                    )
-                    + "## Conversation Commitments Summary:\n\n"
-                    + cmttrack,
+                    "content": rendered_prompt,
                 },
             ],
             response_format=ResponseData,
@@ -204,7 +206,6 @@ Now list all the identified commitments.
             ],
             temperature=temperature,
             max_tokens=128 * 4,
-            stop=["\n\n"],
             seed=seed,
         )
 
@@ -222,7 +223,7 @@ Now list all the identified commitments.
         assert (action := action_res.choices[0].message.parsed) is not None
         assert isinstance(action, ActionData)
 
-        response_cmttrack = self.generate_commitment_tracking(history)
+        response_cmttrack = ""
         response_res = self.generate_response(
             context, question, answer, history, action.action, response_cmttrack
         )
