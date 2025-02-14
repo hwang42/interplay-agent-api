@@ -17,15 +17,45 @@ from ..utils import TemplateManager
 # and thus helps in generating more coherent responses for new ideas
 
 
+GEN_CMTTRACK_FSTR = """Identify the words or phrases in the following conversation that either 1. express commitment or dedication to a particular cause, goal, or obligation, 2. indicate belief and assumptions that caused some state X to another state Y.
+
+{history}
+
+Now list all the identified commitments or likely explanations.
+
+- """
+
+
+GEN_VIEW_FSTR = """Given a story context, a discussion question, your stance, give your views on each of the identified commitments or likely explanations. If you agree with it, say why. If you disagree with it, say why and provide your own explanation.
+
+## Context
+
+{context}
+
+## Question
+
+{question}
+
+## Stance
+
+{answer}
+
+## Previous Commitments, Beliefs, or Explanations
+
+{response_cmttrack}
+
+Now, list your views on each of the identified commitments or likely explanations.
+
+- """
+
+
 class RehearsalCommitTrackHistory:
 
     def __init__(self, init_history: list[str | dict[str, str]] = None) -> None:
         self.history: list[str | dict[str, str]]
         self.history = init_history or []
 
-    def add_agent(
-        self, action: ActionData, response: ResponseData, cmttrack: str
-    ) -> None:
+    def add_agent(self, action: ActionData, response: ResponseData, supl: dict) -> None:
         assert len(self.history) == 0 or isinstance(self.history[-1], str)
 
         self.history.append(
@@ -34,8 +64,8 @@ class RehearsalCommitTrackHistory:
                 "action_decision": action.action,
                 "response_thought": response.thought,
                 "response_response": response.response,
-                "response_cmttrack": cmttrack,
             }
+            | supl
         )
 
     def add_child(self, response: str) -> None:
@@ -48,7 +78,7 @@ class RehearsalCommitTrackHistory:
             (
                 f"Child: {response}"
                 if isinstance(response, str)
-                else f"Agent: ({response['action_decision']}) {response['response_cmttrack']}"
+                else f"Agent: ({response['action_decision']}) {response['response_response']}"
             )
             for response in self.history
         ]
@@ -131,6 +161,7 @@ class RehearsalCommitTrackManager:
             "continue co-construction",
         ],
         cmttrack: str,
+        cmtviews: str,
         *,
         temperature: float = 0.8,
         seed: int = 621,
@@ -148,7 +179,8 @@ class RehearsalCommitTrackManager:
             conversation=str(history),
         )
         if cmttrack:
-            rendered_prompt += f"## Conversation Commitments Summary:\n\n{cmttrack}"
+            rendered_prompt += f"## Conversation Commitments:\n\n{cmttrack}"
+            rendered_prompt += f"## Views for Conversation Commitments:\n\n{cmtviews}"
 
         return self.client.beta.chat.completions.parse(
             model=self.model,
@@ -195,13 +227,42 @@ class RehearsalCommitTrackManager:
             messages=[
                 {
                     "role": "user",
-                    "content": f"""Identify the words or phrases in the following conversation that express commitment or dedication to a particular cause, goal, or obligation.
+                    "content": GEN_CMTTRACK_FSTR.format(history=str(history)),
+                }
+            ],
+            temperature=temperature,
+            max_tokens=128 * 4,
+            seed=seed,
+        )
 
-{str(history)}
+        assert response.choices[0].message.content is not None
 
-Now list all the identified commitments.
+        return "- " + response.choices[0].message.content.strip()
 
-- """,
+    def generate_views(
+        self,
+        context: str,
+        question: str,
+        answer: str,
+        response_cmttrack: str,
+        *,
+        temperature: float = 0.8,
+        seed: int = 621,
+    ) -> str:
+        if response_cmttrack.strip() == "":
+            return ""
+
+        response = self.cmttrack_client.chat.completions.create(
+            model=self.cmttrack_model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": GEN_VIEW_FSTR.format(
+                        context=context,
+                        question=question,
+                        answer=answer,
+                        response_cmttrack=response_cmttrack,
+                    ),
                 }
             ],
             temperature=temperature,
@@ -223,14 +284,13 @@ Now list all the identified commitments.
         assert (action := action_res.choices[0].message.parsed) is not None
         assert isinstance(action, ActionData)
 
-        response_cmttrack = ""
         response_res = self.generate_response(
-            context, question, answer, history, action.action, response_cmttrack
+            context, question, answer, history, action.action, "", ""
         )
         assert (response := response_res.choices[0].message.parsed) is not None
         assert isinstance(response, ResponseData)
 
-        history.add_agent(action, response, response_cmttrack)
+        history.add_agent(action, response, {})
 
         trace_uuid = langfuse_context.get_current_trace_id()
         assert trace_uuid is not None
@@ -253,13 +313,26 @@ Now list all the identified commitments.
         assert isinstance(action, ActionData)
 
         response_cmttrack = self.generate_commitment_tracking(history)
+        response_views = self.generate_views(
+            context, question, answer, response_cmttrack
+        )
         response_res = self.generate_response(
-            context, question, answer, history, action.action, response_cmttrack
+            context,
+            question,
+            answer,
+            history,
+            action.action,
+            response_cmttrack,
+            response_views,
         )
         assert (response := response_res.choices[0].message.parsed) is not None
         assert isinstance(response, ResponseData)
 
-        history.add_agent(action, response, response_cmttrack)
+        history.add_agent(
+            action,
+            response,
+            {"cmt_track": response_cmttrack, "cmt_views": response_views},
+        )
 
         trace_uuid = langfuse_context.get_current_trace_id()
         assert trace_uuid is not None
