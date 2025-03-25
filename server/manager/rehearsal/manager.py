@@ -124,7 +124,8 @@ class RehearsalManager:
             ],
             *,
             temperature: float = 0.8,
-            seed: int = 621
+            seed: int = 621,
+            n: int = 10
     ) -> ParsedChatCompletion:
         template = {
             "information-seeking": "s",
@@ -132,7 +133,7 @@ class RehearsalManager:
             "co-construction": "i"
         }[action.split()[1]]
 
-        return self.client.beta.chat.completions.parse(
+        candidates = self.client.beta.chat.completions.parse(
             model=self.model,
             messages=[
                 {
@@ -152,7 +153,47 @@ class RehearsalManager:
             ],
             response_format=ResponseData,
             temperature=temperature,
-            seed=seed
+            seed=seed,
+            n=n
+        )
+
+        return self.client.beta.chat.completions.parse(
+            model=self.model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "Given the following instructions\n"
+                        "\n"
+                        "<INSTRUCTION>\n"
+                        f"{self.templates.usr(template).render(
+                            context=context,
+                            question=question,
+                            stance=answer,
+                            conversation=str(history))}"
+                        "</INSTRUCTION>\n"
+                        "\n"
+                        "Which of the following response best follow the instruction?\n"
+                        "\n"
+                        "Responses:\n"
+                        "\n"
+                    ) + "\n".join(
+                        f"<RESPONSE {i}>\n{x.message.parsed.response}\n<RESPONSE {i}>"
+                        for i, x in enumerate(candidates.choices, start=1)
+                    ) + (
+                        "\n"
+                        "Provide your answer using the following JSON object format:\n"
+                        "\n"
+                        "{\n"
+                        '    "thought": The internal reasoning of the selection.\n'
+                        '    "response": The selected response itself.\n'
+                        "}"
+                    )
+                }
+            ],
+            response_format=ResponseData,
+            temperature=temperature,
+            seed=seed,
         )
 
     @observe(name="rehearsal_init")
