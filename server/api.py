@@ -18,6 +18,8 @@ from .database import History, Setup, get_database
 from .manager.astro_lite import AstroLiteHistory, AstroLiteManager
 from .manager.astro_next import AstroNextHistory, AstroNextManager
 from .manager.rehearsal import RehearsalHistory, RehearsalManager
+from .manager.rehearsal_heresy import (RehearsalHeresyHistory,
+                                       RehearsalHeresyManager)
 from .manager.rehearsal_rewrite import (RehearsalRewriteHistory,
                                         RehearsalRewriteManager)
 from .manager.role_play import RolePlayHistory, RolePlayManager
@@ -27,6 +29,7 @@ KEY = os.getenv("MASTER_KEY")
 MODELS: dict[str,
              tuple[RolePlayManager, Type[RolePlayHistory]]
              | tuple[RehearsalManager, Type[RehearsalHistory]]
+             | tuple[RehearsalHeresyManager, Type[RehearsalHeresyHistory]]
              | tuple[RehearsalRewriteManager, Type[RehearsalRewriteHistory]]
              | tuple[AstroLiteManager, Type[AstroLiteHistory]]
              | tuple[AstroNextManager, Type[AstroNextHistory]]] = {
@@ -37,11 +40,16 @@ MODELS: dict[str,
     "rehearsal_inquiry": (RehearsalManager("inquiry"), RehearsalHistory),
     "rehearsal_persuasion": (RehearsalManager("persuasion"), RehearsalHistory),
     "rehearsal_information": (RehearsalManager("information"), RehearsalHistory),
+    # rehearsal heresy agent
+    "rehearsal_heresy_mixed": (RehearsalHeresyManager("mixed"), RehearsalHeresyHistory),
+    "rehearsal_heresy_inquiry": (RehearsalHeresyManager("inquiry"), RehearsalHeresyHistory),
+    "rehearsal_heresy_persuasion": (RehearsalHeresyManager("persuasion"), RehearsalHeresyHistory),
+    "rehearsal_heresy_information": (RehearsalHeresyManager("information"), RehearsalHeresyHistory),
     # rehearsal rewrite agent
-    "rehearsal_rewrite_mixed": (RehearsalRewriteManager("mixed"), RehearsalRewriteHistory),
-    "rehearsal_rewrite_inquiry": (RehearsalRewriteManager("inquiry"), RehearsalRewriteHistory),
-    "rehearsal_rewrite_persuasion": (RehearsalRewriteManager("persuasion"), RehearsalRewriteHistory),
-    "rehearsal_rewrite_information": (RehearsalRewriteManager("information"), RehearsalRewriteHistory),
+    # "rehearsal_rewrite_mixed": (RehearsalRewriteManager("mixed"), RehearsalRewriteHistory),
+    # "rehearsal_rewrite_inquiry": (RehearsalRewriteManager("inquiry"), RehearsalRewriteHistory),
+    # "rehearsal_rewrite_persuasion": (RehearsalRewriteManager("persuasion"), RehearsalRewriteHistory),
+    # "rehearsal_rewrite_information": (RehearsalRewriteManager("information"), RehearsalRewriteHistory),
     # astro lite agent
     "astro_lite_mixed": (AstroLiteManager("mixed"), AstroLiteHistory),
     "astro_lite_inquiry": (AstroLiteManager("inquiry"), AstroLiteHistory),
@@ -51,7 +59,7 @@ MODELS: dict[str,
     "astro_next": (AstroNextManager(), AstroNextHistory)
 }
 
-api = FastAPI(version="0.1.4")
+api = FastAPI(version="0.1.5")
 
 api.add_middleware(
     CORSMiddleware,
@@ -63,7 +71,7 @@ api.add_middleware(
 security = HTTPBearer()
 
 
-@ api.get("/models")
+@api.get("/models")
 async def get_models():
     """Get a list of the currently available models."""
     return {"models": list(MODELS.keys())}
@@ -87,7 +95,7 @@ class InitPostData(BaseModel):
         description="A reference answer to be used as the agent's stance throughout this conversation.")
 
 
-@ api.post("/init")
+@api.post("/init")
 async def post_init(key: Annotated[HTTPAuthorizationCredentials, Depends(security)], data: InitPostData, database: Session = Depends(get_database)) -> Reply:
     """Initialize a new conversation with a specific model."""
 
@@ -107,7 +115,7 @@ async def post_init(key: Annotated[HTTPAuthorizationCredentials, Depends(securit
         parent = None
 
         for index, item in enumerate(history.history):
-            if isinstance(history, (RehearsalHistory, RehearsalRewriteHistory)):
+            if isinstance(history, (RehearsalHistory, RehearsalHeresyHistory, RehearsalRewriteHistory)):
                 # item is either a str (child) or dict (agent)
                 if isinstance(item, str):
                     entry_data = {"message": item}
@@ -150,7 +158,7 @@ class StepPostData(BaseModel):
         description="A UUID reference specifying the point of conversation to reply to.")
 
 
-@ api.post("/step")
+@api.post("/step")
 async def post_step(key: Annotated[HTTPAuthorizationCredentials, Depends(security)], data: StepPostData, database: Session = Depends(get_database)) -> Reply:
     """Continue one additional step with an existing conversation."""
 
@@ -204,7 +212,7 @@ async def post_step(key: Annotated[HTTPAuthorizationCredentials, Depends(securit
         parent = history_list[-1][1]
 
         for item in history.history[len(history_list):]:
-            if isinstance(history, (RehearsalHistory, RehearsalRewriteHistory)):
+            if isinstance(history, (RehearsalHistory, RehearsalHeresyHistory, RehearsalRewriteHistory)):
                 # item is either a str (child) or dict (agent)
                 if isinstance(item, str):
                     entry_data = {"message": item}
@@ -277,7 +285,7 @@ async def post_messages(key: Annotated[HTTPAuthorizationCredentials, Depends(sec
         print(message)
         if model.startswith("rehearsal"):
             if not "message" in message:
-                if not "rewrite" in model:
+                if not ("heresy" in model or "rewrite" in model):
                     messages.append(
                         (uuid, "agent", message["response_response"]))
                 else:
