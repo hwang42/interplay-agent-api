@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import uuid
-from typing import Literal, Optional
 import random
+import uuid
+from typing import Literal, Optional, TypedDict
 
 from langfuse.decorators import langfuse_context, observe
 from langfuse.openai import OpenAI
@@ -17,36 +17,62 @@ class ResponseData(BaseModel):
     information_seeking: str
     persuasion: str
     inquiry: str
+    free: str
+
+
+Score = Literal[0, 1, 2, 3, 4]
 
 
 class EvaluationData(BaseModel):
-    information_seeking: Literal[0, 1, 2, 3, 4]
-    persuasion: Literal[0, 1, 2, 3, 4]
-    inquiry: Literal[0, 1, 2, 4]
+    information_seeking: Score
+    persuasion: Score
+    inquiry: Score
+    free: Score
+
+
+Action = Literal["information-seeking", "persuasion", "inquiry", "free"]
 
 
 class ActionData(BaseModel):
-    action: Literal["information-seeking", "persuasion", "inquiry"]
+    action: Action
     information_seeking: int
     persuasion: int
     inquiry: int
+    free: int
 
 
 class RehearsalHeresyHistory:
+    class AgentEntry(TypedDict):
+        action: Action
+
+        evaluation_s: str
+        evaluation_p: str
+        evaluation_i: str
+        evaluation_f: str
+
+        response_s: str
+        response_p: str
+        response_i: str
+        response_f: str
+
     def __init__(self) -> None:
-        self.history: list[str | dict[str, str]] = []
+        self.history: list[str | RehearsalHeresyHistory.AgentEntry] = []
 
     def add_agent(self, action: ActionData, response: ResponseData) -> None:
         assert len(self.history) == 0 or isinstance(self.history[-1], str)
 
         self.history.append({
             "action": action.action,
+
             "evaluation_s": str(action.information_seeking),
             "evaluation_p": str(action.persuasion),
             "evaluation_i": str(action.inquiry),
+            "evaluation_f": str(action.free),
+
             "response_s": response.information_seeking,
             "response_p": response.persuasion,
-            "response_i": response.inquiry
+            "response_i": response.inquiry,
+            "response_f": response.free
         })
 
     def add_child(self, response: str) -> None:
@@ -64,12 +90,14 @@ class RehearsalHeresyHistory:
                 responses.append(f"Child: {response}")
             else:
                 match response["action"]:
-                    case "information_seeking":
+                    case "information-seeking":
                         response = response["response_s"]
                     case "persuasion":
                         response = response["response_p"]
                     case "inquiry":
                         response = response["response_i"]
+                    case "free":
+                        response = response["response_f"]
 
                 responses.append(f"Agent: {response}")
 
@@ -82,13 +110,16 @@ class RehearsalHeresyManager:
             mode: Literal["mixed", "inquiry", "persuasion", "information"],
             *,
             model: str = "gpt-4o-mini",
-            client: Optional[OpenAI] = None
+            client: Optional[OpenAI] = None,
+            free_threshold=0.25
     ) -> None:
         self.templates = TemplateManager(__name__)
 
         self.mode = mode
         self.model = model
         self.client = client or OpenAI()
+
+        self.free_threshold = free_threshold
 
     def generate_response(
             self,
@@ -164,78 +195,69 @@ class RehearsalHeresyManager:
                 evaluations_res.choices[0].message.parsed) is not None
         assert isinstance(evaluations, EvaluationData)
 
-        # TODO: The following is not good code, but I'm in a rush
-        final_action: Optional[Literal[
-            "information-seeking",
-            "persuasion",
-            "inquiry"
-        ]] = None
+        scores: dict[Action, int] = {
+            "information-seeking": evaluations.information_seeking,
+            "persuasion": evaluations.persuasion,
+            "inquiry": evaluations.inquiry
+        }
+
+        # we only allow certain percentage usage of the "free" response
+        total, count = 0, 0
+        for entry in history.history:
+            if isinstance(entry, str):
+                continue
+
+            total += 1
+            
+            if entry["action"] == "free":
+                count += 1
+        
+        if total == 0 or (count / total) <= self.free_threshold:
+            scores["free"] = evaluations.free
+
+        # select the actual move based on the evaluation scores
+        final_action: Action
 
         if self.mode == "mixed":
-            # if mix, use the best response (random tie-break)
-            best_score = max(
-                evaluations.information_seeking,
-                evaluations.persuasion,
-                evaluations.inquiry
-            )
-
-            moves: list[Literal[
-                "information-seeking",
-                "persuasion",
-                "inquiry"
-            ]] = []
-            if evaluations.information_seeking == best_score:
-                moves.append("information-seeking")
-            if evaluations.persuasion == best_score:
-                moves.append("persuasion")
-            if evaluations.inquiry == best_score:
-                moves.append("inquiry")
+            # if mixed, use the best response (random tie-break)
+            best = max(scores.values())
+            moves: list[Action] = [k for k, v in scores.items() if v == best]
 
             final_action = random.choice(moves)
         else:
             # if X, use X if its score >= average score, otherwise use best
-            average = (
-                evaluations.information_seeking
-                + evaluations.persuasion
-                + evaluations.inquiry
-            ) / 3
-
-            score = 0
+            average = sum(scores.values()) / len(scores)
 
             match self.mode:
-                case "information-seeking":
-                    score = evaluations.information_seeking
+                case "information":
+                    score = scores["information-seeking"]
                 case "persuasion":
-                    score = evaluations.persuasion
+                    score = scores["persuasion"]
                 case "inquiry":
-                    score = evaluations.inquiry
+                    score = scores["inquiry"]
+                case mode:
+                    raise RuntimeError(f"Unknown mode: {mode}")
 
             if score >= average:
-                final_action = self.mode  # type: ignore
+                match self.mode:
+                    case "information":
+                        final_action = "information-seeking"
+                    case "persuasion":
+                        final_action = "persuasion"
+                    case "inquiry":
+                        final_action = "inquiry"
             else:
-                best_score = max(
-                    evaluations.information_seeking,
-                    evaluations.persuasion,
-                    evaluations.inquiry
-                )
-
-                moves = []
-                if evaluations.information_seeking == best_score:
-                    moves.append("information-seeking")
-                if evaluations.persuasion == best_score:
-                    moves.append("persuasion")
-                if evaluations.inquiry == best_score:
-                    moves.append("inquiry")
+                best = max(scores.values())
+                moves = [k for k, v in scores.items() if v == best]
 
                 final_action = random.choice(moves)
-
-        assert final_action is not None
 
         return ActionData(
             action=final_action,
             information_seeking=evaluations.information_seeking,
             persuasion=evaluations.persuasion,
-            inquiry=evaluations.inquiry
+            inquiry=evaluations.inquiry,
+            free=evaluations.free
         )
 
     @observe(name="rehearsal_heresy_init")
