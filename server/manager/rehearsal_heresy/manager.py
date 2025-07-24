@@ -290,6 +290,8 @@ class RehearsalHeresyManager:
                 response = candidates.persuasion
             case "inquiry":
                 response = candidates.inquiry
+            case "free":
+                response = candidates.free
 
         return response, history, uuid.UUID(trace_uuid)
 
@@ -325,5 +327,7 @@ class RehearsalHeresyManager:
                 response = candidates.persuasion
             case "inquiry":
                 response = candidates.inquiry
+            case "free":
+                response = candidates.free
 
         return response, history, uuid.UUID(trace_uuid)
