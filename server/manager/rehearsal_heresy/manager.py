@@ -20,14 +20,11 @@ class ResponseData(BaseModel):
     free: str
 
 
-Score = Literal[0, 1, 2, 3, 4]
-
 
 class EvaluationData(BaseModel):
-    information_seeking: Score
-    persuasion: Score
-    inquiry: Score
-    free: Score
+    information_seeking: bool
+    persuasion: bool
+    inquiry: bool
 
 
 Action = Literal["information-seeking", "persuasion", "inquiry", "free"]
@@ -35,10 +32,10 @@ Action = Literal["information-seeking", "persuasion", "inquiry", "free"]
 
 class ActionData(BaseModel):
     action: Action
-    information_seeking: int
-    persuasion: int
-    inquiry: int
-    free: int
+    information_seeking: bool
+    persuasion: bool
+    inquiry: bool
+    free: bool
 
 
 class RehearsalHeresyHistory:
@@ -195,7 +192,7 @@ class RehearsalHeresyManager:
                 evaluations_res.choices[0].message.parsed) is not None
         assert isinstance(evaluations, EvaluationData)
 
-        scores: dict[Action, int] = {
+        yes_or_no: dict[Action, bool] = {
             "information-seeking": evaluations.information_seeking,
             "persuasion": evaluations.persuasion,
             "inquiry": evaluations.inquiry
@@ -213,32 +210,29 @@ class RehearsalHeresyManager:
                 count += 1
         
         if total == 0 or (count / total) <= self.free_threshold:
-            scores["free"] = evaluations.free
+            yes_or_no["free"] = True
 
         # select the actual move based on the evaluation scores
         final_action: Action
 
         if self.mode == "mixed":
             # if mixed, use the best response (random tie-break)
-            best = max(scores.values())
-            moves: list[Action] = [k for k, v in scores.items() if v == best]
+            moves: list[Action] = [k for k, v in yes_or_no.items() if v]
 
             final_action = random.choice(moves)
         else:
             # if X, use X if its score >= average score, otherwise use best
-            average = sum(scores.values()) / len(scores)
-
             match self.mode:
                 case "information":
-                    score = scores["information-seeking"]
+                    flag = yes_or_no["information-seeking"]
                 case "persuasion":
-                    score = scores["persuasion"]
+                    flag = yes_or_no["persuasion"]
                 case "inquiry":
-                    score = scores["inquiry"]
+                    flag = yes_or_no["inquiry"]
                 case mode:
                     raise RuntimeError(f"Unknown mode: {mode}")
 
-            if score >= average:
+            if flag:
                 match self.mode:
                     case "information":
                         final_action = "information-seeking"
@@ -247,17 +241,14 @@ class RehearsalHeresyManager:
                     case "inquiry":
                         final_action = "inquiry"
             else:
-                best = max(scores.values())
-                moves = [k for k, v in scores.items() if v == best]
-
-                final_action = random.choice(moves)
+                final_action = "free"
 
         return ActionData(
             action=final_action,
             information_seeking=evaluations.information_seeking,
             persuasion=evaluations.persuasion,
             inquiry=evaluations.inquiry,
-            free=evaluations.free
+            free=yes_or_no["free"]
         )
 
     @observe(name="rehearsal_heresy_init")
