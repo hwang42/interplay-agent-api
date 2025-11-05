@@ -1,0 +1,84 @@
+volumes:
+  langfuse-db:
+  agent-api-db:
+
+
+services:
+  langfuse-db:
+    image: postgres:17-alpine
+    expose:
+      - "5432/tcp"
+    volumes:
+      - langfuse-db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: secure-langfuse-database-password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      start_period: 10s
+      interval: 60s
+      timeout: 30s
+      retries: 3
+
+
+  langfuse:
+    image: langfuse/langfuse:2
+    ports:
+      - "3000:3000/tcp"
+    environment:
+      HOSTNAME: 0.0.0.0
+
+      DATABASE_URL: postgresql://langfuse:secure-langfuse-database-password@langfuse-db/langfuse
+
+      NEXTAUTH_URL: http://langfuse:3000
+      NEXTAUTH_SECRET: randomly-generated-secrete
+
+      SALT: randomly-generated-salt
+      ENCRYPTION_KEY: randomly-generated-encryption-key
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+
+
+  agent-api-db:
+    image: postgres:17-alpine
+    expose:
+      - "5432/tcp"
+    volumes:
+      - agent-api-db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: agent
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: secure-agent-api-database-password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agent"]
+      start_period: 10s
+      interval: 60s
+      timeout: 30s
+      retries: 3
+
+
+  agent-api:
+    build: ./agent-api
+    image: agent-api:latest
+    ports:
+      - "5000:5000/tcp"
+    restart: unless-stopped
+    environment:
+      MASTER_KEY: secure-api-key
+
+      OPENAI_API_KEY: your-openai-api-key
+
+      LANGFUSE_HOST: http://langfuse:3000
+      LANGFUSE_SECRET_KEY: generated-langfuse-secret-key
+      LANGFUSE_PUBLIC_KEY: generated-langfuse-public-key
+
+      SQLALCHEMY_DATABASE_URL: postgresql+psycopg://agent:secure-agent-api-database-password@agent-api-agent-api-db-1/agent
+    depends_on:
+      langfuse:
+        condition: service_started
+      agent-api-db:
+        condition: service_healthy
